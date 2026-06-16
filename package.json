@@ -1,0 +1,26 @@
+{
+  "name": "gv-loop",
+  "version": "0.1.0",
+  "description": "Lightweight local scheduler for Codex CLI prompts.",
+  "type": "module",
+  "bin": {
+    "gv-loop": "./src/cli.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "check": "bun test && tsc --noEmit"
+  },
+  "keywords": [
+    "codex",
+    "scheduler",
+    "launchd",
+    "automation",
+    "cli"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.0"
+  }
+}
