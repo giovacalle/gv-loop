@@ -48,6 +48,46 @@ export type LoopSpec = {
   };
 };
 
+export type TaskState = "ready" | "claimed" | "running" | "done" | "failed" | "blocked" | "rejected";
+
+export type TaskClaim = {
+  workerId: string;
+  claimedAt: string;
+  leaseExpiresAt?: string;
+};
+
+export type TaskParent = {
+  loopId?: string;
+  taskId?: string;
+  runId?: string;
+  depth: number;
+  reason?: string;
+};
+
+export type TaskSource = {
+  kind: "manual" | "spawn-intent" | "external";
+  path?: string;
+};
+
+export type TaskSpec = {
+  id: string;
+  version: 1;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  cwd: string;
+  prompt: string;
+  runner: RunnerSpec;
+  source: TaskSource;
+  parent?: TaskParent;
+  status: {
+    state: TaskState;
+    claim?: TaskClaim;
+    lastRunId?: string;
+    approved?: boolean;
+  };
+};
+
 export type RunMetadata = {
   loopId: string;
   startedAt: string;
@@ -69,4 +109,16 @@ export type DraftLoop = {
   notify?: NotifyMode;
   sandbox?: SandboxMode;
   yolo?: boolean;
+};
+
+export type DraftTask = {
+  id: string;
+  title: string;
+  prompt: string;
+  cwd: string;
+  codexHome?: string;
+  sandbox?: SandboxMode;
+  yolo?: boolean;
+  source?: TaskSource;
+  parent?: TaskParent;
 };

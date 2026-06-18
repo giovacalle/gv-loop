@@ -16,6 +16,8 @@ Use `--no-yolo --sandbox read-only` or `--sandbox workspace-write` when a loop s
 gv-loop add "every night at 3 check AppX logs and tell me if anything looks wrong"
 gv-loop list
 gv-loop run appx-nightly-check
+gv-loop task add --id issue-001 --prompt-file ./prompts/issue-001.md
+gv-loop task work
 gv-loop show appx-nightly-check
 gv-loop logs appx-nightly-check
 gv-loop pause appx-nightly-check
@@ -54,6 +56,18 @@ By default, loops live under:
       stderr.log
       exit-code.txt
       metadata.json
+  tasks/<id>/
+    task.json
+    prompt.md
+    claim.lock/
+    runs/<timestamp>/
+      prompt.md
+      trace.jsonl
+      final.md
+      stdout.log
+      stderr.log
+      exit-code.txt
+      metadata.json
 ```
 
 Override the store for tests or experiments:
@@ -73,12 +87,41 @@ gv-loop add --id work-profile --schedule 08:00 --codex-home ~/.codex-work "check
 gv-loop add --id safe-report --schedule 09:00 --no-yolo --sandbox read-only "summarize TODOs without editing files"
 gv-loop add --id done-ping --schedule 09:00 --notify always "write a tiny status report"
 gv-loop run portfolio-todos
+gv-loop task add --id ready-issue --cwd ~/Desktop/projects/personal/gv-loop --prompt-file ./prompts/ready-issue.md
+gv-loop task list
+gv-loop task claim ready-issue --worker-id local-worker
+gv-loop task work ready-issue --worker-id local-worker
 gv-loop list
 gv-loop show portfolio-todos
 gv-loop logs portfolio-todos
 gv-loop pause portfolio-todos
 gv-loop resume portfolio-todos
 gv-loop remove portfolio-todos
+```
+
+## Agentic Control Plane
+
+The first control-plane primitives are available as file-backed APIs and `task` CLI commands:
+
+- **Task**: one-shot prompt work item. Unlike a loop, it is not installed into `launchd`.
+- **Claim**: local lock and status transition that lets one worker own one ready task.
+- **Worker**: `gv-loop task work` claims one ready task, runs Codex, writes artifacts, and exits.
+- **Spawn intent**: structured JSON request for child work. The parser defaults to `sandbox: "workspace-write"` and `yolo: false`.
+- **Policy**: validation for spawn depth, children per run, allowed cwd roots, allowed sandbox modes, and yolo permission.
+
+Queue sources are intentionally outside the core. A user can feed tasks from any system by calling `gv-loop task add` from their own prompt, script, or loop. `examples/adapters/` contains optional reference adapters for specific workflow styles.
+
+Spawn intent shape:
+
+```json
+{
+  "version": 1,
+  "kind": "spawn",
+  "prompt": "Implement the next narrow slice.",
+  "cwd": "/Users/me/project",
+  "sandbox": "workspace-write",
+  "yolo": false
+}
 ```
 
 ## Safety

@@ -7,8 +7,10 @@ import { gvLoopHome, launchdDir, loopDir } from "./paths";
 import { ensureHome, latestRunDir, listLoops, loopFromDraft, readLoop, saveLoop, writeLoop } from "./store";
 import { installLaunchdPlist, pauseLaunchd, removeLaunchd, resumeLaunchd, writeLaunchdPlist } from "./launchd";
 import { runLoop } from "./runner";
-import type { SandboxMode } from "./types";
-import { expandTilde, isTruthyAnswer } from "./util";
+import { runTask } from "./task-runner";
+import { claimNextTask, claimTask, defaultTaskId, listTasks, readTask, saveTask, taskFromDraft } from "./task-store";
+import type { DraftTask, SandboxMode } from "./types";
+import { expandTilde, isTruthyAnswer, slugify } from "./util";
 
 type Parsed = {
   command: string;
@@ -24,6 +26,10 @@ async function main(argv: string[]): Promise<void> {
       break;
     case "run":
       await run(parsed);
+      break;
+    case "task":
+    case "tasks":
+      await task(parsed);
       break;
     case "list":
       await list();
@@ -114,6 +120,113 @@ async function run(parsed: Parsed): Promise<void> {
   if (metadata.exitCode !== 0) {
     process.exitCode = metadata.exitCode;
   }
+}
+
+async function task(parsed: Parsed): Promise<void> {
+  const [subcommand = "list", ...rest] = parsed.args;
+  const subParsed = { ...parsed, command: `task ${subcommand}`, args: rest };
+  switch (subcommand) {
+    case "add":
+      await taskAdd(subParsed);
+      break;
+    case "list":
+    case "ls":
+      await taskList();
+      break;
+    case "show":
+      await taskShow(subParsed);
+      break;
+    case "claim":
+      await taskClaim(subParsed);
+      break;
+    case "work":
+      await taskWork(subParsed);
+      break;
+    default:
+      throw new Error(`Unknown task command "${subcommand}". Run gv-loop help.`);
+  }
+}
+
+async function taskAdd(parsed: Parsed): Promise<void> {
+  const prompt = await resolvePrompt(parsed);
+  if (!prompt) {
+    throw new Error("Missing task prompt. Example: gv-loop task add --prompt-file issue.md");
+  }
+  const title = stringFlag(parsed, "title") ?? prompt.split(/\s+/).slice(0, 6).join(" ");
+  const id = stringFlag(parsed, "id") ?? defaultTaskId(slugify(title));
+  const draft: DraftTask = {
+    id,
+    title,
+    prompt,
+    cwd: expandTilde(stringFlag(parsed, "cwd") ?? process.cwd()),
+  };
+  const codexHome = stringFlag(parsed, "codex-home");
+  const sandbox = sandboxFlag(parsed);
+  const yolo = yoloFlag(parsed);
+  if (codexHome) draft.codexHome = expandTilde(codexHome);
+  if (sandbox) draft.sandbox = sandbox;
+  if (yolo !== undefined) draft.yolo = yolo;
+  const spec = taskFromDraft(draft);
+  await saveTask(spec);
+  console.log(`Task: ${spec.id}`);
+  console.log(`Status: ${spec.status.state}`);
+  console.log(`Prompt: ${spec.prompt}`);
+  console.log(`Working directory: ${spec.cwd}`);
+  console.log(`Runner: ${runnerLabel(spec.runner.yolo, spec.runner.sandbox)}`);
+}
+
+async function taskList(): Promise<void> {
+  const tasks = await listTasks();
+  if (tasks.length === 0) {
+    console.log(`No tasks in ${gvLoopHome()}`);
+    return;
+  }
+  for (const task of tasks) {
+    const claim = task.status.claim ? ` ${task.status.claim.workerId}` : "";
+    console.log(`${task.status.state.padEnd(8)} ${task.id.padEnd(32)} ${task.title}${claim}`);
+  }
+}
+
+async function taskShow(parsed: Parsed): Promise<void> {
+  const id = requireId(parsed);
+  console.log(JSON.stringify(await readTask(id), null, 2));
+}
+
+async function taskClaim(parsed: Parsed): Promise<void> {
+  const workerId = stringFlag(parsed, "worker-id") ?? `worker-${process.pid}`;
+  const id = parsed.args[0];
+  const task = id ? await claimTask(id, workerId) : await claimNextTask(workerId);
+  if (!task) {
+    console.log("No ready task claimed.");
+    return;
+  }
+  console.log(`Claimed: ${task.id}`);
+}
+
+async function taskWork(parsed: Parsed): Promise<void> {
+  const workerId = stringFlag(parsed, "worker-id") ?? `worker-${process.pid}`;
+  const id = parsed.args[0];
+  const task = id ? await claimOrUseTask(id, workerId) : await claimNextTask(workerId);
+  if (!task) {
+    console.log("No ready tasks.");
+    return;
+  }
+  const metadata = await runTask(task.id);
+  console.log(`Task complete: ${metadata.finalPath}`);
+  if (metadata.exitCode !== 0) {
+    process.exitCode = metadata.exitCode;
+  }
+}
+
+async function claimOrUseTask(id: string, workerId: string) {
+  const existing = await readTask(id);
+  if (existing.status.state === "ready") {
+    return claimTask(id, workerId);
+  }
+  if (existing.status.state === "claimed" && existing.status.claim?.workerId === workerId) {
+    return existing;
+  }
+  throw new Error(`Task ${id} is ${existing.status.state} and cannot be worked by ${workerId}.`);
 }
 
 async function list(): Promise<void> {
@@ -323,6 +436,11 @@ function printHelp(): void {
 Usage:
   gv-loop add [--id id] [--schedule HH:MM|cron|3600s] [--cwd path] [--prompt-file path] [--codex-home path] [--yolo|--no-yolo] [--sandbox read-only|workspace-write|danger-full-access] [--notify never|failures|always] [--yes] [--no-install] "prompt"
   gv-loop run <id>
+  gv-loop task add [--id id] [--cwd path] [--prompt-file path] [--codex-home path] [--yolo|--no-yolo] [--sandbox read-only|workspace-write|danger-full-access] "prompt"
+  gv-loop task list
+  gv-loop task show <id>
+  gv-loop task claim [id] [--worker-id id]
+  gv-loop task work [id] [--worker-id id]
   gv-loop list
   gv-loop show <id>
   gv-loop logs <id>
