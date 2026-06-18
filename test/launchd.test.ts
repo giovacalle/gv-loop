@@ -11,7 +11,7 @@ const baseSpec: LoopSpec = {
   timezone: "Europe/Rome",
   schedule: { kind: "calendar", hour: 3, minute: 0 },
   prompt: "check AppX",
-  runner: { kind: "codex-exec", json: true, ephemeral: true, sandbox: "read-only" },
+  runner: { kind: "codex-exec", json: true, ephemeral: true, sandbox: "danger-full-access", yolo: true },
   output: { reportFormat: "markdown", trace: true, notify: "failures" },
   status: { enabled: true },
 };

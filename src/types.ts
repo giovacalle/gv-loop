@@ -17,12 +17,14 @@ export type CronSchedule = {
 export type Schedule = CalendarSchedule | IntervalSchedule | CronSchedule;
 
 export type NotifyMode = "never" | "failures" | "always";
+export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
 
 export type RunnerSpec = {
   kind: "codex-exec";
   json: true;
   ephemeral: boolean;
-  sandbox: "read-only";
+  sandbox: SandboxMode;
+  yolo: boolean;
   codexHome?: string;
 };
 
@@ -65,4 +67,6 @@ export type DraftLoop = {
   timezone: string;
   codexHome?: string;
   notify?: NotifyMode;
+  sandbox?: SandboxMode;
+  yolo?: boolean;
 };

@@ -23,7 +23,8 @@ export function loopFromDraft(draft: DraftLoop): LoopSpec {
       kind: "codex-exec",
       json: true,
       ephemeral: true,
-      sandbox: "read-only",
+      sandbox: draft.sandbox ?? "danger-full-access",
+      yolo: draft.yolo ?? true,
       ...(draft.codexHome ? { codexHome: draft.codexHome } : {}),
     },
     output: {

@@ -2,7 +2,15 @@
 
 Lightweight local scheduler for Codex CLI prompts.
 
-`gv-loop` is intentionally small: it stores a prompt, schedules it with macOS `launchd`, runs it with `codex exec --json --sandbox read-only`, and keeps a local trace plus final report.
+`gv-loop` is intentionally small: it stores a prompt, schedules it with macOS `launchd`, runs it with `codex exec --json`, and keeps a local trace plus final report.
+
+By default, loops run Codex in yolo mode:
+
+```text
+codex exec --json --ephemeral --dangerously-bypass-approvals-and-sandbox
+```
+
+Use `--no-yolo --sandbox read-only` or `--sandbox workspace-write` when a loop should be constrained.
 
 ```bash
 gv-loop add "every night at 3 check AppX logs and tell me if anything looks wrong"
@@ -60,7 +68,9 @@ GV_LOOP_HOME=/tmp/gv-loop gv-loop list
 gv-loop doctor
 gv-loop add "every day at 8 check the portfolio repo and summarize TODOs"
 gv-loop add --id portfolio-todos --schedule "0 8 * * *" --cwd ~/Desktop/projects/personal/portfolio "check TODOs and summarize"
+gv-loop add --id afk-feature --schedule "3600s" --cwd ~/Desktop/projects/personal/gv-kit --prompt-file ./prompts/afk-feature.md
 gv-loop add --id work-profile --schedule 08:00 --codex-home ~/.codex-work "check the work repo"
+gv-loop add --id safe-report --schedule 09:00 --no-yolo --sandbox read-only "summarize TODOs without editing files"
 gv-loop add --id done-ping --schedule 09:00 --notify always "write a tiny status report"
 gv-loop run portfolio-todos
 gv-loop list
@@ -78,5 +88,9 @@ v1 does not generate shell commands. It only schedules the saved prompt and runs
 Do not put secrets in prompts. `trace.jsonl` may contain command output, model messages, and tool-call metadata, so keep `~/.gv-loops` private.
 
 Use `--codex-home <path>` when a loop should run with a specific Codex config/auth directory. The path is saved in `loop.json` and passed as `CODEX_HOME` to scheduled runs.
+
+Use `--prompt-file <path>` for longer prompts. The file contents are copied into the loop's saved `prompt.md` when the loop is created.
+
+Use `--sandbox read-only|workspace-write|danger-full-access` to disable yolo mode and run Codex with that sandbox. Use `--no-yolo` explicitly when you want the default sandbox behavior without relying on `--sandbox`.
 
 Use `--notify never|failures|always` to control macOS notifications. The default is `failures`; `always` gives you a simple done notification after successful runs.

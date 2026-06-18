@@ -1,4 +1,4 @@
-import type { DraftLoop, NotifyMode, Schedule } from "./types";
+import type { DraftLoop, NotifyMode, SandboxMode, Schedule } from "./types";
 import { expandTilde, slugify } from "./util";
 
 export type AddOptions = {
@@ -9,6 +9,8 @@ export type AddOptions = {
   timezone?: string;
   codexHome?: string;
   notify?: NotifyMode;
+  sandbox?: SandboxMode;
+  yolo?: boolean;
 };
 
 export function parseSchedule(input: string): { schedule: Schedule; prompt: string } {
@@ -78,6 +80,8 @@ export function draftLoopFromInput(input: string, options: AddOptions): DraftLoo
     timezone: options.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "local",
     ...(options.codexHome ? { codexHome: expandTilde(options.codexHome) } : {}),
     ...(options.notify ? { notify: options.notify } : {}),
+    ...(options.sandbox ? { sandbox: options.sandbox } : {}),
+    ...(options.yolo !== undefined ? { yolo: options.yolo } : {}),
   };
 }
 

@@ -51,6 +51,46 @@ describe("loop store", () => {
     expect((await readLoop("custom-codex", tempHome)).runner.codexHome).toBe("/tmp/codex-home");
   });
 
+  test("defaults to yolo runner mode", async () => {
+    tempHome = await mkdtemp(join(tmpdir(), "gv-loop-test-"));
+    const spec = loopFromDraft({
+      id: "yolo-loop",
+      title: "Yolo Loop",
+      cwd: "/tmp",
+      timezone: "Europe/Rome",
+      prompt: "change things",
+      schedule: { kind: "calendar", hour: 3, minute: 0 },
+    });
+
+    await saveLoop(spec, tempHome);
+
+    expect((await readLoop("yolo-loop", tempHome)).runner).toMatchObject({
+      sandbox: "danger-full-access",
+      yolo: true,
+    });
+  });
+
+  test("persists safe sandbox override", async () => {
+    tempHome = await mkdtemp(join(tmpdir(), "gv-loop-test-"));
+    const spec = loopFromDraft({
+      id: "safe-loop",
+      title: "Safe Loop",
+      cwd: "/tmp",
+      timezone: "Europe/Rome",
+      prompt: "inspect things",
+      schedule: { kind: "calendar", hour: 3, minute: 0 },
+      sandbox: "read-only",
+      yolo: false,
+    });
+
+    await saveLoop(spec, tempHome);
+
+    expect((await readLoop("safe-loop", tempHome)).runner).toMatchObject({
+      sandbox: "read-only",
+      yolo: false,
+    });
+  });
+
   test("persists notify mode", async () => {
     tempHome = await mkdtemp(join(tmpdir(), "gv-loop-test-"));
     const spec = loopFromDraft({

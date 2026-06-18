@@ -7,7 +7,8 @@ import { gvLoopHome, launchdDir, loopDir } from "./paths";
 import { ensureHome, latestRunDir, listLoops, loopFromDraft, readLoop, saveLoop, writeLoop } from "./store";
 import { installLaunchdPlist, pauseLaunchd, removeLaunchd, resumeLaunchd, writeLaunchdPlist } from "./launchd";
 import { runLoop } from "./runner";
-import { isTruthyAnswer } from "./util";
+import type { SandboxMode } from "./types";
+import { expandTilde, isTruthyAnswer } from "./util";
 
 type Parsed = {
   command: string;
@@ -58,8 +59,12 @@ async function main(argv: string[]): Promise<void> {
 
 async function add(parsed: Parsed): Promise<void> {
   await ensureHome();
-  const prompt = parsed.args.join(" ").trim();
-  if (!prompt) throw new Error("Missing prompt. Example: gv-loop add \"every day at 3 check the logs\"");
+  const prompt = await resolvePrompt(parsed);
+  if (!prompt) {
+    throw new Error(
+      "Missing prompt. Example: gv-loop add \"every day at 3 check the logs\" or gv-loop add --schedule 03:00 --prompt-file prompt.md"
+    );
+  }
   const options: AddOptions = {};
   setIfPresent(options, "id", stringFlag(parsed, "id"));
   setIfPresent(options, "title", stringFlag(parsed, "title"));
@@ -68,6 +73,8 @@ async function add(parsed: Parsed): Promise<void> {
   setIfPresent(options, "timezone", stringFlag(parsed, "timezone"));
   setIfPresent(options, "codexHome", stringFlag(parsed, "codex-home"));
   setIfPresent(options, "notify", notifyFlag(parsed));
+  setIfPresent(options, "sandbox", sandboxFlag(parsed));
+  setIfPresent(options, "yolo", yoloFlag(parsed));
   const draft = draftLoopFromInput(prompt, options);
   const spec = loopFromDraft(draft);
 
@@ -76,7 +83,7 @@ async function add(parsed: Parsed): Promise<void> {
   console.log(`Prompt: ${spec.prompt}`);
   console.log(`Working directory: ${spec.cwd}`);
   if (spec.runner.codexHome) console.log(`Codex home: ${spec.runner.codexHome}`);
-  console.log(`Runner: codex exec --json --ephemeral --sandbox ${spec.runner.sandbox}`);
+  console.log(`Runner: ${runnerLabel(spec.runner.yolo, spec.runner.sandbox)}`);
   console.log(`Notify: ${spec.output.notify}`);
   console.log(`Store: ${loopDir(spec.id)}`);
 
@@ -197,7 +204,7 @@ function parseArgs(argv: string[]): Parsed {
   const [command = "", ...rest] = argv;
   const args: string[] = [];
   const flags: Record<string, string | boolean> = {};
-  const booleanFlags = new Set(["yes", "no-install", "scheduled"]);
+  const booleanFlags = new Set(["yes", "no-install", "scheduled", "yolo", "no-yolo"]);
   for (let i = 0; i < rest.length; i++) {
     const part = rest[i]!;
     if (!part.startsWith("--")) {
@@ -243,6 +250,41 @@ function notifyFlag(parsed: Parsed): "never" | "failures" | "always" | undefined
   throw new Error("--notify must be one of: never, failures, always.");
 }
 
+function sandboxFlag(parsed: Parsed): SandboxMode | undefined {
+  const value = stringFlag(parsed, "sandbox");
+  if (!value) return undefined;
+  if (value === "read-only" || value === "workspace-write" || value === "danger-full-access") return value;
+  throw new Error("--sandbox must be one of: read-only, workspace-write, danger-full-access.");
+}
+
+function yoloFlag(parsed: Parsed): boolean | undefined {
+  if (parsed.flags.yolo && parsed.flags["no-yolo"]) {
+    throw new Error("Use only one of --yolo or --no-yolo.");
+  }
+  if (parsed.flags.yolo && parsed.flags.sandbox) {
+    throw new Error("Use either --yolo or --sandbox, not both.");
+  }
+  if (parsed.flags.yolo) return true;
+  if (parsed.flags["no-yolo"]) return false;
+  if (parsed.flags.sandbox) return false;
+  return undefined;
+}
+
+async function resolvePrompt(parsed: Parsed): Promise<string> {
+  const inlinePrompt = parsed.args.join(" ").trim();
+  const promptFile = stringFlag(parsed, "prompt-file");
+  if (!promptFile) return inlinePrompt;
+  if (inlinePrompt) {
+    throw new Error("Use either an inline prompt or --prompt-file, not both.");
+  }
+  return (await readFile(expandTilde(promptFile), "utf8")).trim();
+}
+
+function runnerLabel(yolo: boolean, sandbox: SandboxMode): string {
+  if (yolo) return "codex exec --json --ephemeral --dangerously-bypass-approvals-and-sandbox";
+  return `codex exec --json --ephemeral --sandbox ${sandbox}`;
+}
+
 function setIfPresent<K extends keyof AddOptions>(options: AddOptions, key: K, value: AddOptions[K] | undefined): void {
   if (value !== undefined) {
     options[key] = value;
@@ -279,7 +321,7 @@ function printHelp(): void {
   console.log(`gv-loop
 
 Usage:
-  gv-loop add [--id id] [--schedule HH:MM|cron|3600s] [--cwd path] [--codex-home path] [--notify never|failures|always] [--yes] [--no-install] "prompt"
+  gv-loop add [--id id] [--schedule HH:MM|cron|3600s] [--cwd path] [--prompt-file path] [--codex-home path] [--yolo|--no-yolo] [--sandbox read-only|workspace-write|danger-full-access] [--notify never|failures|always] [--yes] [--no-install] "prompt"
   gv-loop run <id>
   gv-loop list
   gv-loop show <id>

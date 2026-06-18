@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { readLoop, readPrompt } from "./store";
 import { runsDir } from "./paths";
 import { timestampId } from "./util";
-import type { RunMetadata } from "./types";
+import type { RunMetadata, RunnerSpec } from "./types";
 
 export async function runLoop(id: string, home?: string): Promise<RunMetadata> {
   const spec = await readLoop(id, home);
@@ -13,7 +13,7 @@ export async function runLoop(id: string, home?: string): Promise<RunMetadata> {
   await mkdir(runDir, { recursive: true });
   await writeFile(join(runDir, "prompt.md"), prompt);
 
-  const args = ["exec", "--json", "--ephemeral", "--sandbox", spec.runner.sandbox, prompt.trim()];
+  const args = buildCodexExecArgs(spec.runner, prompt);
   const proc = Bun.spawn(["codex", ...args], {
     cwd: spec.cwd,
     stdout: "pipe",
@@ -53,6 +53,18 @@ export async function runLoop(id: string, home?: string): Promise<RunMetadata> {
     await notify(`gv-loop: ${id} complete`, final.slice(0, 120));
   }
   return metadata;
+}
+
+export function buildCodexExecArgs(runner: RunnerSpec, prompt: string): string[] {
+  const args = ["exec", "--json"];
+  if (runner.ephemeral) args.push("--ephemeral");
+  if (runner.yolo) {
+    args.push("--dangerously-bypass-approvals-and-sandbox");
+  } else {
+    args.push("--sandbox", runner.sandbox);
+  }
+  args.push(prompt.trim());
+  return args;
 }
 
 export function extractFinalMessage(jsonl: string): string | undefined {
