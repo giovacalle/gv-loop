@@ -49,6 +49,10 @@ export function taskRunsDir(id: string, home = gvLoopHome()): string {
   return join(taskDir(id, home), "runs");
 }
 
+export function taskRunSpawnIntentsDir(taskId: string, runId: string, home = gvLoopHome()): string {
+  return join(taskRunsDir(taskId, home), runId, "spawn-intents");
+}
+
 export function taskClaimLockPath(id: string, home = gvLoopHome()): string {
   return join(taskDir(id, home), "claim.lock");
 }

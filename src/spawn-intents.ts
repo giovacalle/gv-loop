@@ -3,10 +3,12 @@ import type { SandboxMode } from "./types";
 export type SpawnIntent = {
   version: 1;
   kind: "spawn";
+  title?: string;
   prompt: string;
   cwd: string;
   sandbox: SandboxMode;
   yolo: boolean;
+  reason?: string;
 };
 
 const sandboxModes = new Set<SandboxMode>(["read-only", "workspace-write", "danger-full-access"]);
@@ -34,6 +36,8 @@ export function parseSpawnIntent(value: unknown): SpawnIntent {
 
   const prompt = expectNonEmptyString(object.prompt, "prompt");
   const cwd = expectNonEmptyString(object.cwd, "cwd");
+  const title = optionalNonEmptyString(object.title, "title");
+  const reason = optionalNonEmptyString(object.reason, "reason");
   const sandbox = object.sandbox ?? "workspace-write";
   if (!isSandboxMode(sandbox)) {
     throw new Error("Spawn intent sandbox is invalid.");
@@ -44,7 +48,7 @@ export function parseSpawnIntent(value: unknown): SpawnIntent {
     throw new Error("Spawn intent yolo must be a boolean.");
   }
 
-  return {
+  const intent: SpawnIntent = {
     version: 1,
     kind: "spawn",
     prompt,
@@ -52,6 +56,9 @@ export function parseSpawnIntent(value: unknown): SpawnIntent {
     sandbox,
     yolo,
   };
+  if (title) intent.title = title;
+  if (reason) intent.reason = reason;
+  return intent;
 }
 
 export function isSandboxMode(value: unknown): value is SandboxMode {
@@ -68,6 +75,14 @@ function expectObject(value: unknown): Record<string, unknown> {
 function expectNonEmptyString(value: unknown, field: string): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`Spawn intent ${field} must be a non-empty string.`);
+  }
+  return value;
+}
+
+function optionalNonEmptyString(value: unknown, field: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Spawn intent ${field} must be a non-empty string when present.`);
   }
   return value;
 }

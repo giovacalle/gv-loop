@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { claimTask, readTask, saveTask, taskFromDraft } from "../src/task-store";
+import { claimTask, listTasks, readTask, saveTask, taskFromDraft } from "../src/task-store";
 import { runTask } from "../src/task-runner";
 
 let tempHome: string | undefined;
@@ -56,5 +56,48 @@ describe("task runner", () => {
     expect(metadata.exitCode).toBe(2);
     expect(await readFile(metadata.finalPath, "utf8")).toContain("Codex failed with exit code 2");
     expect((await readTask("fail-me", tempHome)).status.state).toBe("failed");
+  });
+
+  test("processes spawn intents when a spawn policy is provided", async () => {
+    tempHome = await mkdtemp(join(tmpdir(), "gv-loop-task-runner-test-"));
+    await saveTask(taskFromDraft({ id: "spawn-parent", title: "Spawn parent", prompt: "parent", cwd: "/tmp/project" }), tempHome);
+    await claimTask("spawn-parent", "worker-a", tempHome);
+
+    await runTask("spawn-parent", tempHome, {
+      spawnPolicy: {
+        maxDepth: 1,
+        maxChildrenPerRun: 1,
+        allowedCwdRoots: ["/tmp/project"],
+        allowedSandboxModes: ["workspace-write"],
+      },
+      execute: async ({ prompt }) => {
+        const intentsDir = prompt.match(/write one JSON file per child task into:\n\n(.+?)\n\nEach file must/s)?.[1];
+        expect(intentsDir).toBeTruthy();
+        await writeFile(
+          join(intentsDir!, "child.json"),
+          `${JSON.stringify({
+            version: 1,
+            kind: "spawn",
+            title: "Child from run",
+            prompt: "child prompt",
+            cwd: "/tmp/project/child",
+          })}\n`
+        );
+        return {
+          stdout: `${JSON.stringify({ type: "agent_message", text: "parent done" })}\n`,
+          stderr: "",
+          exitCode: 0,
+        };
+      },
+    });
+
+    const child = (await listTasks(tempHome)).find((task) => task.id !== "spawn-parent");
+    expect(child).toMatchObject({
+      title: "Child from run",
+      prompt: "child prompt",
+      cwd: "/tmp/project/child",
+      source: { kind: "spawn-intent" },
+      parent: { taskId: "spawn-parent", depth: 1 },
+    });
   });
 });

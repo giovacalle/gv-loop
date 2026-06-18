@@ -91,6 +91,7 @@ gv-loop task add --id ready-issue --cwd ~/Desktop/projects/personal/gv-loop --pr
 gv-loop task list
 gv-loop task claim ready-issue --worker-id local-worker
 gv-loop task work ready-issue --worker-id local-worker
+gv-loop task work ready-issue --spawn-policy ./spawn-policy.json
 gv-loop list
 gv-loop show portfolio-todos
 gv-loop logs portfolio-todos
@@ -123,6 +124,19 @@ Spawn intent shape:
   "yolo": false
 }
 ```
+
+Spawn intents are inert unless the worker receives an explicit policy:
+
+```json
+{
+  "maxDepth": 1,
+  "maxChildrenPerRun": 2,
+  "allowedCwdRoots": ["/Users/me/project"],
+  "allowedSandboxModes": ["read-only", "workspace-write"]
+}
+```
+
+With `gv-loop task work --spawn-policy ./spawn-policy.json`, the task prompt includes the run's spawn-intent directory. Accepted intents become ready child tasks; rejected intents are recorded with reasons in `spawn-intents/result.json`.
 
 ## Safety
 

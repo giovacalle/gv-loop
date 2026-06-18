@@ -8,19 +8,23 @@ describe("spawn intent parsing", () => {
         JSON.stringify({
           version: 1,
           kind: "spawn",
+          title: "Child check",
           prompt: "check the child task",
           cwd: "/tmp/project",
           sandbox: "read-only",
           yolo: false,
+          reason: "Parent found follow-up",
         })
       )
     ).toEqual({
       version: 1,
       kind: "spawn",
+      title: "Child check",
       prompt: "check the child task",
       cwd: "/tmp/project",
       sandbox: "read-only",
       yolo: false,
+      reason: "Parent found follow-up",
     });
   });
 

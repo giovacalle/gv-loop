@@ -9,6 +9,7 @@ import { installLaunchdPlist, pauseLaunchd, removeLaunchd, resumeLaunchd, writeL
 import { runLoop } from "./runner";
 import { runTask } from "./task-runner";
 import { claimNextTask, claimTask, defaultTaskId, listTasks, readTask, saveTask, taskFromDraft } from "./task-store";
+import type { SpawnPolicy } from "./policy";
 import type { DraftTask, SandboxMode } from "./types";
 import { expandTilde, isTruthyAnswer, slugify } from "./util";
 
@@ -211,11 +212,18 @@ async function taskWork(parsed: Parsed): Promise<void> {
     console.log("No ready tasks.");
     return;
   }
-  const metadata = await runTask(task.id);
+  const spawnPolicy = await resolveSpawnPolicy(parsed);
+  const metadata = await runTask(task.id, undefined, spawnPolicy ? { spawnPolicy } : undefined);
   console.log(`Task complete: ${metadata.finalPath}`);
   if (metadata.exitCode !== 0) {
     process.exitCode = metadata.exitCode;
   }
+}
+
+async function resolveSpawnPolicy(parsed: Parsed): Promise<SpawnPolicy | undefined> {
+  const policyFile = stringFlag(parsed, "spawn-policy");
+  if (!policyFile) return undefined;
+  return JSON.parse(await readFile(expandTilde(policyFile), "utf8")) as SpawnPolicy;
 }
 
 async function claimOrUseTask(id: string, workerId: string) {
@@ -440,7 +448,7 @@ Usage:
   gv-loop task list
   gv-loop task show <id>
   gv-loop task claim [id] [--worker-id id]
-  gv-loop task work [id] [--worker-id id]
+  gv-loop task work [id] [--worker-id id] [--spawn-policy policy.json]
   gv-loop list
   gv-loop show <id>
   gv-loop logs <id>
