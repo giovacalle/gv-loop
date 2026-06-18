@@ -201,4 +201,69 @@ describe("CLI task", () => {
     expect(stdout).toContain("Final: /tmp/final.md");
     expect(stdout).toContain("Spawn intents: 1 accepted, 0 rejected");
   });
+
+  test("creates a review task from the latest task result", async () => {
+    tempHome = await mkdtemp(join(tmpdir(), "gv-loop-cli-test-"));
+    await mkdir(join(tempHome, "tasks", "implemented"), { recursive: true });
+    await writeFile(
+      join(tempHome, "tasks", "implemented", "task.json"),
+      `${JSON.stringify({
+        id: "implemented",
+        version: 1,
+        title: "Implemented",
+        createdAt: "2026-06-19T10:00:00.000Z",
+        updatedAt: "2026-06-19T10:00:00.000Z",
+        cwd: "/repo",
+        prompt: "implement",
+        runner: { kind: "codex-exec", json: true, ephemeral: true, sandbox: "workspace-write", yolo: false },
+        source: { kind: "manual" },
+        status: { state: "done", lastRunId: "2026-06-19T10-00-00-000Z" },
+      })}\n`
+    );
+    await writeFile(join(tempHome, "tasks", "implemented", "prompt.md"), "implement\n");
+    const runDir = join(tempHome, "tasks", "implemented", "runs", "2026-06-19T10-00-00-000Z");
+    await mkdir(runDir, { recursive: true });
+    const finalPath = join(runDir, "final.md");
+    await writeFile(finalPath, "Implemented and tested.\n");
+    await writeFile(
+      join(runDir, "summary.json"),
+      `${JSON.stringify({
+        version: 1,
+        task: { id: "implemented", title: "Implemented", source: { kind: "manual" } },
+        run: {
+          id: "2026-06-19T10-00-00-000Z",
+          startedAt: "2026-06-19T10:00:00.000Z",
+          finishedAt: "2026-06-19T10:01:00.000Z",
+          cwd: "/repo",
+          exitCode: 0,
+          status: "done",
+          tracePath: join(runDir, "trace.jsonl"),
+          finalPath,
+        },
+        runner: { kind: "codex-exec", json: true, ephemeral: true, sandbox: "workspace-write", yolo: false },
+      })}\n`
+    );
+
+    const review = Bun.spawn(["bun", "src/cli.ts", "task", "review", "implemented"], {
+      cwd: process.cwd(),
+      env: { ...process.env, GV_LOOP_HOME: tempHome },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(review.stdout).text(),
+      new Response(review.stderr).text(),
+      review.exited,
+    ]);
+
+    expect(exitCode, stderr).toBe(0);
+    expect(stdout).toContain("Review task:");
+    expect(stdout).toContain("Status: ready");
+    const entries = await (await import("node:fs/promises")).readdir(join(tempHome, "tasks"));
+    const reviewTaskId = entries.find((entry) => entry.startsWith("review-implemented"));
+    expect(reviewTaskId).toBeTruthy();
+    expect(await readFile(join(tempHome, "tasks", reviewTaskId!, "prompt.md"), "utf8")).toContain(
+      "Implemented and tested."
+    );
+  });
 });

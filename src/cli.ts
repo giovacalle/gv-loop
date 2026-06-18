@@ -6,6 +6,7 @@ import { draftLoopFromInput, scheduleToHuman, type AddOptions } from "./schedule
 import { gvLoopHome, launchdDir, loopDir, taskRunsDir } from "./paths";
 import { ensureHome, latestRunDir, listLoops, loopFromDraft, readLoop, saveLoop, writeLoop } from "./store";
 import { installLaunchdPlist, pauseLaunchd, removeLaunchd, resumeLaunchd, writeLaunchdPlist } from "./launchd";
+import { createReviewTask, readFinalReport } from "./review";
 import { runLoop } from "./runner";
 import { readRunSummary } from "./run-summary";
 import { runTask } from "./task-runner";
@@ -147,6 +148,9 @@ async function task(parsed: Parsed): Promise<void> {
     case "result":
       await taskResult(subParsed);
       break;
+    case "review":
+      await taskReview(subParsed);
+      break;
     default:
       throw new Error(`Unknown task command "${subcommand}". Run gv-loop help.`);
   }
@@ -251,6 +255,24 @@ async function taskResult(parsed: Parsed): Promise<void> {
   if (summary.spawnIntents) {
     console.log(`Spawn intents: ${summary.spawnIntents.accepted.length} accepted, ${summary.spawnIntents.rejected.length} rejected`);
   }
+}
+
+async function taskReview(parsed: Parsed): Promise<void> {
+  const id = requireId(parsed);
+  const latest = await latestTaskRunDir(id);
+  if (!latest) {
+    throw new Error(`No task runs yet for ${id}.`);
+  }
+  const sourceTask = await readTask(id);
+  const summary = await readRunSummary(join(latest, "summary.json"));
+  const reviewTask = await createReviewTask({
+    sourceTask,
+    summary,
+    finalReport: await readFinalReport(summary.run.finalPath),
+  });
+  console.log(`Review task: ${reviewTask.id}`);
+  console.log(`Status: ${reviewTask.status.state}`);
+  console.log(`Working directory: ${reviewTask.cwd}`);
 }
 
 async function resolveSpawnPolicy(parsed: Parsed): Promise<SpawnPolicy | undefined> {
@@ -496,6 +518,7 @@ Usage:
   gv-loop task claim [id] [--worker-id id]
   gv-loop task work [id] [--worker-id id] [--spawn-policy policy.json]
   gv-loop task result <id>
+  gv-loop task review <id>
   gv-loop list
   gv-loop show <id>
   gv-loop logs <id>
