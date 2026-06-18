@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -158,5 +158,47 @@ describe("CLI task", () => {
     expect(await readFile(join(tempHome, "tasks", "isolated", "task.json"), "utf8")).toContain(
       '"baseBranch": "main"'
     );
+  });
+
+  test("prints a concise task result from summary.json", async () => {
+    tempHome = await mkdtemp(join(tmpdir(), "gv-loop-cli-test-"));
+    const runDir = join(tempHome, "tasks", "reported", "runs", "2026-06-19T10-00-00-000Z");
+    await mkdir(runDir, { recursive: true });
+    await writeFile(
+      join(runDir, "summary.json"),
+      `${JSON.stringify({
+        version: 1,
+        task: { id: "reported", title: "Reported", source: { kind: "manual" } },
+        run: {
+          id: "2026-06-19T10-00-00-000Z",
+          startedAt: "2026-06-19T10:00:00.000Z",
+          finishedAt: "2026-06-19T10:01:00.000Z",
+          cwd: "/tmp/project",
+          exitCode: 0,
+          status: "done",
+          tracePath: "/tmp/trace.jsonl",
+          finalPath: "/tmp/final.md",
+        },
+        runner: { kind: "codex-exec", json: true, ephemeral: true, sandbox: "workspace-write", yolo: false },
+        spawnIntents: { accepted: [{ taskId: "child", file: "child.json" }], rejected: [] },
+      })}\n`
+    );
+
+    const result = Bun.spawn(["bun", "src/cli.ts", "task", "result", "reported"], {
+      cwd: process.cwd(),
+      env: { ...process.env, GV_LOOP_HOME: tempHome },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(result.stdout).text(),
+      new Response(result.stderr).text(),
+      result.exited,
+    ]);
+
+    expect(exitCode, stderr).toBe(0);
+    expect(stdout).toContain("reported: done");
+    expect(stdout).toContain("Final: /tmp/final.md");
+    expect(stdout).toContain("Spawn intents: 1 accepted, 0 rejected");
   });
 });

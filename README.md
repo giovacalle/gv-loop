@@ -56,6 +56,7 @@ By default, loops live under:
       stderr.log
       exit-code.txt
       metadata.json
+      summary.json
   tasks/<id>/
     task.json
     prompt.md
@@ -94,6 +95,7 @@ gv-loop task list
 gv-loop task claim ready-issue --worker-id local-worker
 gv-loop task work ready-issue --worker-id local-worker
 gv-loop task work ready-issue --spawn-policy ./spawn-policy.json
+gv-loop task result ready-issue
 gv-loop list
 gv-loop show portfolio-todos
 gv-loop logs portfolio-todos
@@ -110,6 +112,7 @@ The first control-plane primitives are available as file-backed APIs and `task` 
 - **Claim**: local lock and status transition that lets one worker own one ready task.
 - **Worker**: `gv-loop task work` claims one ready task, runs Codex, writes artifacts, and exits.
 - **Worktree isolation**: `gv-loop task add --worktree` runs the task in `~/.gv-loops/worktrees/<id>` on a dedicated branch.
+- **Result contract**: every task run writes `summary.json` with task/run metadata, worktree details, diff summary, and spawn intent results.
 - **Spawn intent**: structured JSON request for child work. The parser defaults to `sandbox: "workspace-write"` and `yolo: false`.
 - **Policy**: validation for spawn depth, children per run, allowed cwd roots, allowed sandbox modes, and yolo permission.
 

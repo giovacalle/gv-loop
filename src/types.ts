@@ -105,6 +105,7 @@ export type RunMetadata = {
   exitCode: number;
   tracePath: string;
   finalPath: string;
+  summaryPath?: string;
 };
 
 export type DraftLoop = {

@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { taskRunSpawnIntentsDir, taskRunsDir } from "./paths";
 import { type SpawnPolicy } from "./policy";
 import { buildCodexExecArgs, extractFinalMessage } from "./runner";
+import { writeRunSummary } from "./run-summary";
 import { processSpawnIntents } from "./spawn-processor";
+import type { SpawnProcessingResult } from "./spawn-processor";
 import { readTask, readTaskPrompt, writeTask } from "./task-store";
 import type { RunMetadata, RunnerSpec } from "./types";
 import { timestampId } from "./util";
@@ -72,6 +74,7 @@ export async function runTask(
   await writeFile(join(runDir, "stderr.log"), stderr);
   await writeFile(join(runDir, "exit-code.txt"), `${exitCode}\n`);
   await writeFile(finalPath, final.trim() ? `${final.trim()}\n` : "\n");
+  let spawnResult: SpawnProcessingResult | undefined;
   if (options.spawnPolicy && exitCode === 0) {
     const input = {
       parentTask: spec,
@@ -79,7 +82,7 @@ export async function runTask(
       intentsDir: spawnIntentsDir,
       policy: options.spawnPolicy,
     };
-    await processSpawnIntents(home ? { ...input, home } : input);
+    spawnResult = await processSpawnIntents(home ? { ...input, home } : input);
   }
 
   const metadata: RunMetadata = {
@@ -91,6 +94,15 @@ export async function runTask(
     tracePath,
     finalPath,
   };
+  const summaryPath = await writeRunSummary(runDir, {
+    task: spec,
+    metadata,
+    runId,
+    worktree,
+    ...(spawnResult ? { spawnResult } : {}),
+    ...(options.git ? { git: options.git } : {}),
+  });
+  metadata.summaryPath = summaryPath;
   await writeFile(join(runDir, "metadata.json"), `${JSON.stringify(metadata, null, 2)}\n`);
 
   const latest = await readTask(id, home);

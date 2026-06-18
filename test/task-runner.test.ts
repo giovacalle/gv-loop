@@ -38,7 +38,9 @@ describe("task runner", () => {
     });
 
     expect(metadata.exitCode).toBe(0);
+    expect(metadata.summaryPath).toBeTruthy();
     expect(await readFile(metadata.finalPath, "utf8")).toBe("completed task\n");
+    expect(await readFile(metadata.summaryPath!, "utf8")).toContain('"status": "done"');
     expect((await readTask("run-me", tempHome)).status.state).toBe("done");
   });
 
@@ -135,6 +137,9 @@ describe("task runner", () => {
     });
 
     expect(metadata.cwd).toBe(join(tempHome, "worktrees", "isolated-task", "apps/web"));
+    const summary = await readFile(metadata.summaryPath!, "utf8");
+    expect(summary).toContain('"branch": "gv-loop/isolated-task"');
+    expect(summary).toContain('"changedFiles": []');
     expect((await readTask("isolated-task", tempHome)).worktree).toMatchObject({
       enabled: true,
       branch: "gv-loop/isolated-task",

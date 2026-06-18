@@ -1,12 +1,13 @@
 #!/usr/bin/env bun
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { draftLoopFromInput, scheduleToHuman, type AddOptions } from "./schedule";
-import { gvLoopHome, launchdDir, loopDir } from "./paths";
+import { gvLoopHome, launchdDir, loopDir, taskRunsDir } from "./paths";
 import { ensureHome, latestRunDir, listLoops, loopFromDraft, readLoop, saveLoop, writeLoop } from "./store";
 import { installLaunchdPlist, pauseLaunchd, removeLaunchd, resumeLaunchd, writeLaunchdPlist } from "./launchd";
 import { runLoop } from "./runner";
+import { readRunSummary } from "./run-summary";
 import { runTask } from "./task-runner";
 import { claimNextTask, claimTask, defaultTaskId, listTasks, readTask, saveTask, taskFromDraft } from "./task-store";
 import type { SpawnPolicy } from "./policy";
@@ -143,6 +144,9 @@ async function task(parsed: Parsed): Promise<void> {
     case "work":
       await taskWork(subParsed);
       break;
+    case "result":
+      await taskResult(subParsed);
+      break;
     default:
       throw new Error(`Unknown task command "${subcommand}". Run gv-loop help.`);
   }
@@ -228,10 +232,44 @@ async function taskWork(parsed: Parsed): Promise<void> {
   }
 }
 
+async function taskResult(parsed: Parsed): Promise<void> {
+  const id = requireId(parsed);
+  const latest = await latestTaskRunDir(id);
+  if (!latest) {
+    console.log(`No task runs yet for ${id}.`);
+    return;
+  }
+  const summary = await readRunSummary(join(latest, "summary.json"));
+  console.log(`${summary.task.id}: ${summary.run.status}`);
+  console.log(`Run: ${summary.run.id}`);
+  console.log(`Final: ${summary.run.finalPath}`);
+  if (summary.worktree) {
+    console.log(`Worktree: ${summary.worktree.path}`);
+    console.log(`Branch: ${summary.worktree.branch}`);
+    console.log(`Changed files: ${summary.worktree.diff?.changedFiles.length ?? 0}`);
+  }
+  if (summary.spawnIntents) {
+    console.log(`Spawn intents: ${summary.spawnIntents.accepted.length} accepted, ${summary.spawnIntents.rejected.length} rejected`);
+  }
+}
+
 async function resolveSpawnPolicy(parsed: Parsed): Promise<SpawnPolicy | undefined> {
   const policyFile = stringFlag(parsed, "spawn-policy");
   if (!policyFile) return undefined;
   return JSON.parse(await readFile(expandTilde(policyFile), "utf8")) as SpawnPolicy;
+}
+
+async function latestTaskRunDir(id: string): Promise<string | undefined> {
+  try {
+    const entries = await readdir(taskRunsDir(id), { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(taskRunsDir(id), entry.name))
+      .sort()
+      .at(-1);
+  } catch {
+    return undefined;
+  }
 }
 
 async function claimOrUseTask(id: string, workerId: string) {
@@ -457,6 +495,7 @@ Usage:
   gv-loop task show <id>
   gv-loop task claim [id] [--worker-id id]
   gv-loop task work [id] [--worker-id id] [--spawn-policy policy.json]
+  gv-loop task result <id>
   gv-loop list
   gv-loop show <id>
   gv-loop logs <id>
