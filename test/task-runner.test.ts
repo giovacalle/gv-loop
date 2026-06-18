@@ -100,4 +100,46 @@ describe("task runner", () => {
       parent: { taskId: "spawn-parent", depth: 1 },
     });
   });
+
+  test("runs worktree-enabled tasks in an isolated worktree cwd", async () => {
+    tempHome = await mkdtemp(join(tmpdir(), "gv-loop-task-runner-test-"));
+    await saveTask(
+      taskFromDraft({
+        id: "isolated-task",
+        title: "Isolated task",
+        prompt: "edit code",
+        cwd: "/repo/apps/web",
+        worktree: { enabled: true },
+      }),
+      tempHome
+    );
+    await claimTask("isolated-task", "worker-a", tempHome);
+
+    const metadata = await runTask("isolated-task", tempHome, {
+      git: async (args) => {
+        if (args.join(" ") === "rev-parse --show-toplevel") {
+          return { stdout: "/repo\n", stderr: "", exitCode: 0 };
+        }
+        return { stdout: "", stderr: "", exitCode: 0 };
+      },
+      execute: async ({ cwd, prompt }) => {
+        expect(cwd).toBe(join(tempHome!, "worktrees", "isolated-task", "apps/web"));
+        expect(prompt).toContain("gv-loop worktree isolation is enabled");
+        expect(prompt).toContain("gv-loop/isolated-task");
+        return {
+          stdout: `${JSON.stringify({ type: "agent_message", text: "done in worktree" })}\n`,
+          stderr: "",
+          exitCode: 0,
+        };
+      },
+    });
+
+    expect(metadata.cwd).toBe(join(tempHome, "worktrees", "isolated-task", "apps/web"));
+    expect((await readTask("isolated-task", tempHome)).worktree).toMatchObject({
+      enabled: true,
+      branch: "gv-loop/isolated-task",
+      path: join(tempHome, "worktrees", "isolated-task"),
+      originalCwd: "/repo/apps/web",
+    });
+  });
 });

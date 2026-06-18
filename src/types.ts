@@ -69,6 +69,14 @@ export type TaskSource = {
   path?: string;
 };
 
+export type TaskWorktree = {
+  enabled: boolean;
+  baseBranch?: string;
+  branch?: string;
+  path?: string;
+  originalCwd?: string;
+};
+
 export type TaskSpec = {
   id: string;
   version: 1;
@@ -80,6 +88,7 @@ export type TaskSpec = {
   runner: RunnerSpec;
   source: TaskSource;
   parent?: TaskParent;
+  worktree?: TaskWorktree;
   status: {
     state: TaskState;
     claim?: TaskClaim;
@@ -121,4 +130,5 @@ export type DraftTask = {
   yolo?: boolean;
   source?: TaskSource;
   parent?: TaskParent;
+  worktree?: TaskWorktree;
 };

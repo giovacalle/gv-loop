@@ -7,6 +7,7 @@ import { processSpawnIntents } from "./spawn-processor";
 import { readTask, readTaskPrompt, writeTask } from "./task-store";
 import type { RunMetadata, RunnerSpec } from "./types";
 import { timestampId } from "./util";
+import { setupTaskWorktree, type GitCommand } from "./worktree";
 
 export type TaskExecution = {
   stdout: string;
@@ -22,6 +23,7 @@ export type TaskExecutor = (input: {
 
 export type RunTaskOptions = {
   execute?: TaskExecutor;
+  git?: GitCommand;
   spawnPolicy?: SpawnPolicy;
 };
 
@@ -46,11 +48,21 @@ export async function runTask(
   if (options.spawnPolicy) await mkdir(spawnIntentsDir, { recursive: true });
   await writeFile(join(runDir, "prompt.md"), prompt);
 
+  const worktree = await setupTaskWorktree(spec, home, options.git);
+  if (spec.worktree?.enabled) {
+    spec.worktree = {
+      ...spec.worktree,
+      branch: worktree.branch,
+      path: worktree.path,
+      originalCwd: worktree.originalCwd,
+    };
+  }
   spec.status = { ...spec.status, state: "running", lastRunId: runId };
   await writeTask(spec, home);
 
-  const executionPrompt = options.spawnPolicy ? promptWithSpawnInstructions(prompt, spawnIntentsDir) : prompt;
-  const { stdout, stderr, exitCode } = await execute({ cwd: spec.cwd, prompt: executionPrompt, runner: spec.runner });
+  const basePrompt = spec.worktree?.enabled ? promptWithWorktreeInstructions(prompt, worktree.cwd, worktree.branch) : prompt;
+  const executionPrompt = options.spawnPolicy ? promptWithSpawnInstructions(basePrompt, spawnIntentsDir) : basePrompt;
+  const { stdout, stderr, exitCode } = await execute({ cwd: worktree.cwd, prompt: executionPrompt, runner: spec.runner });
   const final = extractFinalMessage(stdout) ?? fallbackFinal(exitCode, stderr);
   const finishedAt = new Date();
   const tracePath = join(runDir, "trace.jsonl");
@@ -74,7 +86,7 @@ export async function runTask(
     loopId: id,
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
-    cwd: spec.cwd,
+    cwd: worktree.cwd,
     exitCode,
     tracePath,
     finalPath,
@@ -89,6 +101,25 @@ export async function runTask(
   };
   await writeTask(latest, home);
   return metadata;
+}
+
+function promptWithWorktreeInstructions(prompt: string, cwd: string, branch: string): string {
+  return `${prompt.trim()}
+
+---
+
+gv-loop worktree isolation is enabled for this task.
+
+Run all file edits and verification in this working directory:
+
+${cwd}
+
+The isolated branch is:
+
+${branch}
+
+Do not edit the original checkout.
+`;
 }
 
 function promptWithSpawnInstructions(prompt: string, spawnIntentsDir: string): string {

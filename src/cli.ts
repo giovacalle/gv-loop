@@ -167,12 +167,20 @@ async function taskAdd(parsed: Parsed): Promise<void> {
   if (codexHome) draft.codexHome = expandTilde(codexHome);
   if (sandbox) draft.sandbox = sandbox;
   if (yolo !== undefined) draft.yolo = yolo;
+  if (parsed.flags.worktree) {
+    draft.worktree = { enabled: true };
+    const branch = stringFlag(parsed, "worktree-branch");
+    const baseBranch = stringFlag(parsed, "worktree-base");
+    if (branch) draft.worktree.branch = branch;
+    if (baseBranch) draft.worktree.baseBranch = baseBranch;
+  }
   const spec = taskFromDraft(draft);
   await saveTask(spec);
   console.log(`Task: ${spec.id}`);
   console.log(`Status: ${spec.status.state}`);
   console.log(`Prompt: ${spec.prompt}`);
   console.log(`Working directory: ${spec.cwd}`);
+  if (spec.worktree?.enabled) console.log("Worktree: enabled");
   console.log(`Runner: ${runnerLabel(spec.runner.yolo, spec.runner.sandbox)}`);
 }
 
@@ -325,7 +333,7 @@ function parseArgs(argv: string[]): Parsed {
   const [command = "", ...rest] = argv;
   const args: string[] = [];
   const flags: Record<string, string | boolean> = {};
-  const booleanFlags = new Set(["yes", "no-install", "scheduled", "yolo", "no-yolo"]);
+  const booleanFlags = new Set(["yes", "no-install", "scheduled", "yolo", "no-yolo", "worktree"]);
   for (let i = 0; i < rest.length; i++) {
     const part = rest[i]!;
     if (!part.startsWith("--")) {
@@ -444,7 +452,7 @@ function printHelp(): void {
 Usage:
   gv-loop add [--id id] [--schedule HH:MM|cron|3600s] [--cwd path] [--prompt-file path] [--codex-home path] [--yolo|--no-yolo] [--sandbox read-only|workspace-write|danger-full-access] [--notify never|failures|always] [--yes] [--no-install] "prompt"
   gv-loop run <id>
-  gv-loop task add [--id id] [--cwd path] [--prompt-file path] [--codex-home path] [--yolo|--no-yolo] [--sandbox read-only|workspace-write|danger-full-access] "prompt"
+  gv-loop task add [--id id] [--cwd path] [--prompt-file path] [--codex-home path] [--worktree] [--worktree-branch branch] [--worktree-base ref] [--yolo|--no-yolo] [--sandbox read-only|workspace-write|danger-full-access] "prompt"
   gv-loop task list
   gv-loop task show <id>
   gv-loop task claim [id] [--worker-id id]

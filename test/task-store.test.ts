@@ -34,6 +34,24 @@ describe("task store", () => {
     });
   });
 
+  test("persists optional worktree settings", async () => {
+    tempHome = await mkdtemp(join(tmpdir(), "gv-loop-task-test-"));
+    await saveTask(
+      taskFromDraft({
+        id: "worktree-task",
+        title: "Worktree task",
+        prompt: "change code",
+        cwd: "/tmp/project",
+        worktree: { enabled: true, baseBranch: "main", branch: "feature/task" },
+      }),
+      tempHome
+    );
+
+    expect(await readTask("worktree-task", tempHome)).toMatchObject({
+      worktree: { enabled: true, baseBranch: "main", branch: "feature/task" },
+    });
+  });
+
   test("claims one ready task and prevents duplicate claims", async () => {
     tempHome = await mkdtemp(join(tmpdir(), "gv-loop-task-test-"));
     await saveTask(

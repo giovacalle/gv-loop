@@ -124,4 +124,39 @@ describe("CLI task", () => {
       '"workerId": "cli-worker"'
     );
   });
+
+  test("creates a worktree-enabled task", async () => {
+    tempHome = await mkdtemp(join(tmpdir(), "gv-loop-cli-test-"));
+    const add = Bun.spawn(
+      [
+        "bun",
+        "src/cli.ts",
+        "task",
+        "add",
+        "--id",
+        "isolated",
+        "--worktree",
+        "--worktree-base",
+        "main",
+        "change code",
+      ],
+      {
+        cwd: process.cwd(),
+        env: { ...process.env, GV_LOOP_HOME: tempHome },
+        stdout: "pipe",
+        stderr: "pipe",
+      }
+    );
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(add.stdout).text(),
+      new Response(add.stderr).text(),
+      add.exited,
+    ]);
+
+    expect(exitCode, stderr).toBe(0);
+    expect(stdout).toContain("Worktree: enabled");
+    expect(await readFile(join(tempHome, "tasks", "isolated", "task.json"), "utf8")).toContain(
+      '"baseBranch": "main"'
+    );
+  });
 });

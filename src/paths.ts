@@ -13,12 +13,20 @@ export function tasksDir(home = gvLoopHome()): string {
   return join(home, "tasks");
 }
 
+export function worktreesDir(home = gvLoopHome()): string {
+  return join(home, "worktrees");
+}
+
 export function loopDir(id: string, home = gvLoopHome()): string {
   return join(loopsDir(home), id);
 }
 
 export function taskDir(id: string, home = gvLoopHome()): string {
   return join(tasksDir(home), id);
+}
+
+export function taskWorktreeDir(id: string, home = gvLoopHome()): string {
+  return join(worktreesDir(home), id);
 }
 
 export function loopSpecPath(id: string, home = gvLoopHome()): string {

@@ -35,6 +35,7 @@ export function taskFromDraft(draft: DraftTask): TaskSpec {
     },
     source: draft.source ?? { kind: "manual" },
     ...(draft.parent ? { parent: draft.parent } : {}),
+    ...(draft.worktree ? { worktree: draft.worktree } : {}),
     status: {
       state: "ready",
     },

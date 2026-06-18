@@ -68,6 +68,7 @@ By default, loops live under:
       stderr.log
       exit-code.txt
       metadata.json
+  worktrees/<id>/
 ```
 
 Override the store for tests or experiments:
@@ -88,6 +89,7 @@ gv-loop add --id safe-report --schedule 09:00 --no-yolo --sandbox read-only "sum
 gv-loop add --id done-ping --schedule 09:00 --notify always "write a tiny status report"
 gv-loop run portfolio-todos
 gv-loop task add --id ready-issue --cwd ~/Desktop/projects/personal/gv-loop --prompt-file ./prompts/ready-issue.md
+gv-loop task add --id isolated-change --cwd ~/Desktop/projects/personal/gv-loop --worktree --worktree-base main "make the scoped change"
 gv-loop task list
 gv-loop task claim ready-issue --worker-id local-worker
 gv-loop task work ready-issue --worker-id local-worker
@@ -107,6 +109,7 @@ The first control-plane primitives are available as file-backed APIs and `task` 
 - **Task**: one-shot prompt work item. Unlike a loop, it is not installed into `launchd`.
 - **Claim**: local lock and status transition that lets one worker own one ready task.
 - **Worker**: `gv-loop task work` claims one ready task, runs Codex, writes artifacts, and exits.
+- **Worktree isolation**: `gv-loop task add --worktree` runs the task in `~/.gv-loops/worktrees/<id>` on a dedicated branch.
 - **Spawn intent**: structured JSON request for child work. The parser defaults to `sandbox: "workspace-write"` and `yolo: false`.
 - **Policy**: validation for spawn depth, children per run, allowed cwd roots, allowed sandbox modes, and yolo permission.
 
