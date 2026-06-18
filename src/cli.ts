@@ -10,7 +10,18 @@ import { createReviewTask, readFinalReport } from "./review";
 import { runLoop } from "./runner";
 import { readRunSummary } from "./run-summary";
 import { runTask } from "./task-runner";
-import { claimNextTask, claimTask, defaultTaskId, listTasks, readTask, saveTask, taskFromDraft } from "./task-store";
+import {
+  claimNextTask,
+  claimTask,
+  defaultTaskId,
+  listTasks,
+  listTaskTree,
+  readTask,
+  saveTask,
+  setTaskApproval,
+  stopTaskTree,
+  taskFromDraft,
+} from "./task-store";
 import type { SpawnPolicy } from "./policy";
 import type { DraftTask, SandboxMode } from "./types";
 import { expandTilde, isTruthyAnswer, slugify } from "./util";
@@ -134,10 +145,13 @@ async function task(parsed: Parsed): Promise<void> {
       break;
     case "list":
     case "ls":
-      await taskList();
+      await taskList(subParsed);
       break;
     case "show":
       await taskShow(subParsed);
+      break;
+    case "tree":
+      await taskTree(subParsed);
       break;
     case "claim":
       await taskClaim(subParsed);
@@ -150,6 +164,15 @@ async function task(parsed: Parsed): Promise<void> {
       break;
     case "review":
       await taskReview(subParsed);
+      break;
+    case "approve":
+      await taskApprove(subParsed, true);
+      break;
+    case "reject":
+      await taskApprove(subParsed, false);
+      break;
+    case "stop-tree":
+      await taskStopTree(subParsed);
       break;
     default:
       throw new Error(`Unknown task command "${subcommand}". Run gv-loop help.`);
@@ -192,8 +215,9 @@ async function taskAdd(parsed: Parsed): Promise<void> {
   console.log(`Runner: ${runnerLabel(spec.runner.yolo, spec.runner.sandbox)}`);
 }
 
-async function taskList(): Promise<void> {
-  const tasks = await listTasks();
+async function taskList(parsed: Parsed): Promise<void> {
+  const status = stringFlag(parsed, "status");
+  const tasks = (await listTasks()).filter((task) => !status || task.status.state === status);
   if (tasks.length === 0) {
     console.log(`No tasks in ${gvLoopHome()}`);
     return;
@@ -207,6 +231,15 @@ async function taskList(): Promise<void> {
 async function taskShow(parsed: Parsed): Promise<void> {
   const id = requireId(parsed);
   console.log(JSON.stringify(await readTask(id), null, 2));
+}
+
+async function taskTree(parsed: Parsed): Promise<void> {
+  const id = requireId(parsed);
+  const tree = await listTaskTree(id);
+  for (const task of tree) {
+    const depth = task.parent?.depth ?? 0;
+    console.log(`${"  ".repeat(depth)}${task.status.state.padEnd(8)} ${task.id} ${task.title}`);
+  }
 }
 
 async function taskClaim(parsed: Parsed): Promise<void> {
@@ -273,6 +306,21 @@ async function taskReview(parsed: Parsed): Promise<void> {
   console.log(`Review task: ${reviewTask.id}`);
   console.log(`Status: ${reviewTask.status.state}`);
   console.log(`Working directory: ${reviewTask.cwd}`);
+}
+
+async function taskApprove(parsed: Parsed, approved: boolean): Promise<void> {
+  const id = requireId(parsed);
+  const task = await setTaskApproval(id, approved);
+  console.log(`${approved ? "Approved" : "Rejected"}: ${task.id}`);
+}
+
+async function taskStopTree(parsed: Parsed): Promise<void> {
+  const id = requireId(parsed);
+  const stopped = await stopTaskTree(id);
+  console.log(`Stopped descendants: ${stopped.length}`);
+  for (const task of stopped) {
+    console.log(`rejected ${task.id}`);
+  }
 }
 
 async function resolveSpawnPolicy(parsed: Parsed): Promise<SpawnPolicy | undefined> {
@@ -515,10 +563,14 @@ Usage:
   gv-loop task add [--id id] [--cwd path] [--prompt-file path] [--codex-home path] [--worktree] [--worktree-branch branch] [--worktree-base ref] [--yolo|--no-yolo] [--sandbox read-only|workspace-write|danger-full-access] "prompt"
   gv-loop task list
   gv-loop task show <id>
+  gv-loop task tree <id>
   gv-loop task claim [id] [--worker-id id]
   gv-loop task work [id] [--worker-id id] [--spawn-policy policy.json]
   gv-loop task result <id>
   gv-loop task review <id>
+  gv-loop task approve <id>
+  gv-loop task reject <id>
+  gv-loop task stop-tree <id>
   gv-loop list
   gv-loop show <id>
   gv-loop logs <id>

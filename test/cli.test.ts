@@ -266,4 +266,68 @@ describe("CLI task", () => {
       "Implemented and tested."
     );
   });
+
+  test("filters, trees, approves, rejects, and stops task descendants", async () => {
+    tempHome = await mkdtemp(join(tmpdir(), "gv-loop-cli-test-"));
+    async function writeTask(id: string, title: string, state: string, parent?: { taskId: string; depth: number }) {
+      await mkdir(join(tempHome!, "tasks", id), { recursive: true });
+      await writeFile(
+        join(tempHome!, "tasks", id, "task.json"),
+        `${JSON.stringify({
+          id,
+          version: 1,
+          title,
+          createdAt: "2026-06-19T10:00:00.000Z",
+          updatedAt: "2026-06-19T10:00:00.000Z",
+          cwd: "/repo",
+          prompt: title,
+          runner: { kind: "codex-exec", json: true, ephemeral: true, sandbox: "workspace-write", yolo: false },
+          source: { kind: "manual" },
+          ...(parent ? { parent: { ...parent, runId: "run-1" } } : {}),
+          status: { state },
+        })}\n`
+      );
+      await writeFile(join(tempHome!, "tasks", id, "prompt.md"), `${title}\n`);
+    }
+    await writeTask("root", "Root", "done");
+    await writeTask("child", "Child", "ready", { taskId: "root", depth: 1 });
+
+    const tree = Bun.spawn(["bun", "src/cli.ts", "task", "tree", "root"], {
+      cwd: process.cwd(),
+      env: { ...process.env, GV_LOOP_HOME: tempHome },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(await new Response(tree.stdout).text()).toContain("ready    child Child");
+    expect(await tree.exited).toBe(0);
+
+    const approved = Bun.spawn(["bun", "src/cli.ts", "task", "approve", "root"], {
+      cwd: process.cwd(),
+      env: { ...process.env, GV_LOOP_HOME: tempHome },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(await approved.exited).toBe(0);
+    expect(await readFile(join(tempHome, "tasks", "root", "task.json"), "utf8")).toContain('"approved": true');
+
+    const stop = Bun.spawn(["bun", "src/cli.ts", "task", "stop-tree", "root"], {
+      cwd: process.cwd(),
+      env: { ...process.env, GV_LOOP_HOME: tempHome },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stopStdout = await new Response(stop.stdout).text();
+    expect(await stop.exited).toBe(0);
+    expect(stopStdout).toContain("Stopped descendants: 1");
+    expect(await readFile(join(tempHome, "tasks", "child", "task.json"), "utf8")).toContain('"state": "rejected"');
+
+    const rejected = Bun.spawn(["bun", "src/cli.ts", "task", "list", "--status", "rejected"], {
+      cwd: process.cwd(),
+      env: { ...process.env, GV_LOOP_HOME: tempHome },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(await new Response(rejected.stdout).text()).toContain("child");
+    expect(await rejected.exited).toBe(0);
+  });
 });

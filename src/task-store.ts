@@ -7,7 +7,7 @@ import {
   taskSpecPath,
   tasksDir,
 } from "./paths";
-import type { DraftTask, TaskClaim, TaskSpec } from "./types";
+import type { DraftTask, TaskClaim, TaskSpec, TaskState } from "./types";
 import { assertSafeId, timestampId } from "./util";
 
 export async function ensureTaskHome(home?: string): Promise<void> {
@@ -85,6 +85,50 @@ export async function listTasks(home?: string): Promise<TaskSpec[]> {
   return tasks.sort((a, b) => a.id.localeCompare(b.id));
 }
 
+export async function listTaskTree(rootId: string, home?: string): Promise<TaskSpec[]> {
+  const tasks = await listTasks(home);
+  const byParent = new Map<string, TaskSpec[]>();
+  for (const task of tasks) {
+    const parentId = task.parent?.taskId;
+    if (!parentId) continue;
+    byParent.set(parentId, [...(byParent.get(parentId) ?? []), task]);
+  }
+
+  const root = tasks.find((task) => task.id === rootId);
+  if (!root) throw new Error(`Task ${rootId} not found.`);
+  const tree: TaskSpec[] = [];
+  const visit = (task: TaskSpec) => {
+    tree.push(task);
+    for (const child of byParent.get(task.id) ?? []) visit(child);
+  };
+  visit(root);
+  return tree;
+}
+
+export async function setTaskApproval(id: string, approved: boolean, home?: string): Promise<TaskSpec> {
+  const task = await readTask(id, home);
+  task.status = {
+    ...task.status,
+    approved,
+    state: approved ? task.status.state : "rejected",
+  };
+  await writeTask(task, home);
+  return task;
+}
+
+export async function stopTaskTree(rootId: string, home?: string): Promise<TaskSpec[]> {
+  const tree = await listTaskTree(rootId, home);
+  const stopped: TaskSpec[] = [];
+  for (const task of tree.slice(1)) {
+    if (!isTerminalState(task.status.state)) {
+      task.status = { ...task.status, state: "rejected", approved: false };
+      await writeTask(task, home);
+      stopped.push(task);
+    }
+  }
+  return stopped;
+}
+
 export async function claimNextTask(workerId: string, home?: string, leaseSeconds = 1800): Promise<TaskSpec | undefined> {
   const ready = (await listTasks(home)).filter((task) => task.status.state === "ready");
   for (const task of ready) {
@@ -141,4 +185,8 @@ export function defaultTaskId(title: string, createdAt = new Date()): string {
     .slice(0, 42)
     .replace(/-+$/g, "");
   return `${base || "task"}-${timestamp}`;
+}
+
+function isTerminalState(state: TaskState): boolean {
+  return state === "done" || state === "failed" || state === "rejected";
 }

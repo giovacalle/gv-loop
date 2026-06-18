@@ -3,7 +3,17 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { taskPromptPath, taskSpecPath } from "../src/paths";
-import { claimNextTask, claimTask, listTasks, readTask, saveTask, taskFromDraft } from "../src/task-store";
+import {
+  claimNextTask,
+  claimTask,
+  listTasks,
+  listTaskTree,
+  readTask,
+  saveTask,
+  setTaskApproval,
+  stopTaskTree,
+  taskFromDraft,
+} from "../src/task-store";
 
 let tempHome: string | undefined;
 
@@ -84,5 +94,47 @@ describe("task store", () => {
     expect((await claimNextTask("worker-a", tempHome))?.id).toBe("first-task");
     expect((await claimNextTask("worker-b", tempHome))?.id).toBe("second-task");
     expect((await listTasks(tempHome)).map((task) => task.status.state)).toEqual(["claimed", "claimed"]);
+  });
+
+  test("lists task trees and stops non-terminal descendants", async () => {
+    tempHome = await mkdtemp(join(tmpdir(), "gv-loop-task-test-"));
+    await saveTask(taskFromDraft({ id: "root", title: "Root", prompt: "root", cwd: "/tmp/project" }), tempHome);
+    await saveTask(
+      taskFromDraft({
+        id: "child-ready",
+        title: "Child ready",
+        prompt: "child",
+        cwd: "/tmp/project",
+        parent: { taskId: "root", runId: "run-1", depth: 1 },
+      }),
+      tempHome
+    );
+    const done = taskFromDraft({
+      id: "child-done",
+      title: "Child done",
+      prompt: "done",
+      cwd: "/tmp/project",
+      parent: { taskId: "root", runId: "run-1", depth: 1 },
+    });
+    done.status.state = "done";
+    await saveTask(done, tempHome);
+
+    expect((await listTaskTree("root", tempHome)).map((task) => task.id)).toEqual(["root", "child-done", "child-ready"]);
+    expect((await stopTaskTree("root", tempHome)).map((task) => task.id)).toEqual(["child-ready"]);
+    expect((await readTask("child-ready", tempHome)).status).toMatchObject({ state: "rejected", approved: false });
+    expect((await readTask("child-done", tempHome)).status.state).toBe("done");
+  });
+
+  test("approves and rejects tasks", async () => {
+    tempHome = await mkdtemp(join(tmpdir(), "gv-loop-task-test-"));
+    const task = taskFromDraft({ id: "decision", title: "Decision", prompt: "decide", cwd: "/tmp/project" });
+    task.status.state = "done";
+    await saveTask(task, tempHome);
+
+    expect((await setTaskApproval("decision", true, tempHome)).status).toMatchObject({ state: "done", approved: true });
+    expect((await setTaskApproval("decision", false, tempHome)).status).toMatchObject({
+      state: "rejected",
+      approved: false,
+    });
   });
 });

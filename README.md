@@ -97,6 +97,9 @@ gv-loop task work ready-issue --worker-id local-worker
 gv-loop task work ready-issue --spawn-policy ./spawn-policy.json
 gv-loop task result ready-issue
 gv-loop task review ready-issue
+gv-loop task tree ready-issue
+gv-loop task approve ready-issue
+gv-loop task stop-tree ready-issue
 gv-loop list
 gv-loop show portfolio-todos
 gv-loop logs portfolio-todos
@@ -115,6 +118,7 @@ The first control-plane primitives are available as file-backed APIs and `task` 
 - **Worktree isolation**: `gv-loop task add --worktree` runs the task in `~/.gv-loops/worktrees/<id>` on a dedicated branch.
 - **Result contract**: every task run writes `summary.json` with task/run metadata, worktree details, diff summary, and spawn intent results.
 - **Review task**: `gv-loop task review <id>` creates a read-only child task from the latest `summary.json` and `final.md`.
+- **Human controls**: `task tree`, `task approve`, `task reject`, and `task stop-tree` make task trees inspectable and interruptible.
 - **Spawn intent**: structured JSON request for child work. The parser defaults to `sandbox: "workspace-write"` and `yolo: false`.
 - **Policy**: validation for spawn depth, children per run, allowed cwd roots, allowed sandbox modes, and yolo permission.
 
